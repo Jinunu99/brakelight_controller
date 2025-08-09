@@ -1,3 +1,6 @@
+/*
+아두이노에서 엔코더 신호를 측정하여 라즈베리파이에 uart 전송
+*/
 #include <Encoder.h>
 
 #define PI 3.14159
