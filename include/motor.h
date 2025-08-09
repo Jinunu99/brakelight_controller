@@ -3,17 +3,18 @@
 
 #include "def.h"
 #include <math.h> // lroundf 함수를 위함
+#include <time.h> // clock_gettime을 위함
 
 // 파라미터
-#define PWM_MIN 0
+#define PWM_MIN 55
 #define PWM_MAX 255
 #define STEP_MIN 1
 #define STEP_MAX 20
 
 // 회생제동 단계별 기본감속
-#define BASE_DOWN_L1  2   // 약함
+#define BASE_DOWN_L1  3   // 약함
 #define BASE_DOWN_L2  4   // 보통
-#define BASE_DOWN_L3  6   // 강함
+#define BASE_DOWN_L3  5   // 강함
 
 // PWM 가중 계수
 #define K_PWM_L1 0.6f
@@ -21,8 +22,8 @@
 #define K_PWM_L3 1.4f
 
 // 곡률(>=1). 1이면 선형, 2면 제곱, 1.5면 약한 곡선
-#define GAMMA_L1 1.1f
-#define GAMMA_L2 1.3f
+#define GAMMA_L1 1.4f
+#define GAMMA_L2 1.5f
 #define GAMMA_L3 1.6f
 
 // 왼쪽 모터

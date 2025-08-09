@@ -7,6 +7,45 @@
 #include "./include/uart.h"
 
 
+#include <stdio.h>
+#include <unistd.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include "ws2811.h"
+
+#define LED_COUNT 8
+#define LED_PIN 18             // GPIO18 (물리핀 12) - PWM
+#define DMA 10
+#define BRIGHTNESS 5
+#define STRIP_TYPE WS2811_STRIP_GRB   // WS2812B는 일반적으로 GRB
+
+#define COLOR(r, g, b) ( ((uint32_t)(r) << 16) | ((uint32_t)(g) << 8) | (uint32_t)(b) )
+
+ws2811_t ledstring = {
+    .freq = WS2811_TARGET_FREQ,
+    .dmanum = DMA,
+    .channel = {
+        [0] = {
+            .gpionum = LED_PIN,
+            .count = LED_COUNT,
+            .invert = 0,
+            .brightness = BRIGHTNESS,
+            .strip_type = STRIP_TYPE
+        },
+        [1] = {0}
+    }
+};
+
+void led_set(uint32_t color)
+{
+    for (int i = 0; i < LED_COUNT; i++)
+    {
+        ledstring.channel[0].leds[i] = color;
+    }
+    ws2811_render(&ledstring);
+}
+
+
 int hw_INIT(int *spi_handle, int *uart_fd)
 {
     // GPIO 초기화
@@ -34,6 +73,15 @@ int hw_INIT(int *spi_handle, int *uart_fd)
         gpioTerminate();
         return -3;
     }
+
+    // LED 초기화
+    if (ws2811_init(&ledstring) != WS2811_SUCCESS)
+    {
+        fprintf(stderr, "ws2811 초기화 실패!\n");
+        return -4;
+    }
+    led_set(COLOR(0, 0, 0)); // LED OFF
+
     return 0; // 성공
 }
 
@@ -47,7 +95,13 @@ int main()
     motor_INIT(); // 모터 정방향으로 초기화
 
     int control_pwm = 0; // 실제로 모터 제어할 pwm
-    float MotorSpeed = 0.0f; // 모터의 속도[m/s]
+    float PrevMotorSpeed = 0.0f; // 이전 모터 속도
+    float MotorSpeed = 0.0f;     // 현재 모터 속도[m/s]
+    float acceleration = 0.0f;   // 현재 가속도
+    int led_flag = -1;           // LED를 노란색 -> 주황색으로 자연스럽게 바꾸기 위함
+
+    struct timespec prevTime, currTime;
+    clock_gettime(CLOCK_MONOTONIC, &prevTime);
 
     while (1)
     {
@@ -82,10 +136,20 @@ int main()
             }
         }
 
+        // 모터 가속도 계산
+        clock_gettime(CLOCK_MONOTONIC, &currTime);
+        double deltaT = (currTime.tv_sec - prevTime.tv_sec) + (currTime.tv_nsec - prevTime.tv_nsec) / 1e9;
+        acceleration = (MotorSpeed - PrevMotorSpeed) / deltaT;
+        PrevMotorSpeed = MotorSpeed;
+        prevTime = currTime;
+
         // 페달을 밟음 (현재 pwm이 클때)
         if (curr_pwm > control_pwm)
         {
             control_pwm = curr_pwm; // 현재의 pwm으로 모터 제어
+
+            led_flag = -1;
+            led_set(COLOR(0, 0, 0)); // LED OFF
         }
         // 페달을 살짝 밟음 or 페달을 밟지 않을때
         else
@@ -93,28 +157,56 @@ int main()
             int brake_step = dowm_step_dynamic(step, control_pwm);
             control_pwm -= brake_step;
             
-            if (control_pwm < PWM_MIN)
-                control_pwm = 0;
+            if (control_pwm < PWM_MIN) // 최저 pwm인 55보다 작으면
+                control_pwm = PWM_MIN;
+
+            
+            // 감속도가 0.0f는 그냥 무시
+            if (acceleration == 0.0f)
+                continue;
+
+            // 감속도가 작으면 LED OFF
+            if (acceleration > -10.0f)
+            {
+                led_flag = -1;
+                led_set(COLOR(0, 0, 0)); // LED OFF
+            }
+            // 감속도가 크다면 LED를 노란색 -> 주황색으로 그라데이션으로 변화될 수 있도록
+            else
+            {
+                // 페달을 뗀 직후의 pwm값을 led_flag에 넣으며 LED가 노랑 -> 주황으로 자연스럽게 변화되도록
+                if (led_flag == -1)
+                    led_flag = control_pwm;
+
+                // 노란색 (255, 255, 0) -> 주황색 (255, 165, 0)
+                // 여기서 90.0은 노란색과 주황색의 차이인데 주황색을 진하게 하기위해 150으로 설정
+                int g = (int)(255.0f - ((float)(led_flag - control_pwm) / (float)(led_flag - PWM_MIN + 1) * 150.0f));
+                led_set(COLOR(255, (uint8_t)g, 0));
+            }
         }
 
         // 브레이크 페달을 밟으면 정지
         if (adc_brake > 10)
+        {
             control_pwm = 0;
+            led_set(COLOR(255, 0, 0));
+        }
 
         // 모터 제어
         motor_PWM(control_pwm);
 
 
-        printf("step: %d| 압력센서: %4d | PWM: %3d | MotorSpeed: %.3f[m/s]\n", step, adc_accel, control_pwm, MotorSpeed);
+        printf("step: %d| 압력센서: %4d | PWM: %3d | MotorSpeed: %.3f[m/s] | acceleration: %.3f[m/s^2]\n", step, adc_accel, control_pwm, MotorSpeed, acceleration);
         fflush(stdout);
-
-
 
         gpioDelay(10000); // 10ms
     }
 
+    led_set(COLOR(0,0,0));
+    ws2811_fini(&ledstring);
     spiClose(spi_handle);
     gpioTerminate();
     close(uart_fd);
+
     return 0;
 }

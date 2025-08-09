@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -lpigpio -lrt -lpthread -lm
+CFLAGS = -I/usr/local/include -L/usr/local/lib -lws2811 -lpigpio -lrt -lpthread -lm
 SRC = main.c source/adc.c source/motor.c source/uart.c 
 TARGET = main
 
