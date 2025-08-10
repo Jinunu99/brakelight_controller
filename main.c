@@ -3,47 +3,9 @@
 실행파일 삭제 : make clean
 */
 #include "./include/adc.h"
+#include "./include/led.h"
 #include "./include/motor.h"
 #include "./include/uart.h"
-
-
-#include <stdio.h>
-#include <unistd.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include "ws2811.h"
-
-#define LED_COUNT 8
-#define LED_PIN 18             // GPIO18 (물리핀 12) - PWM
-#define DMA 10
-#define BRIGHTNESS 5
-#define STRIP_TYPE WS2811_STRIP_GRB   // WS2812B는 일반적으로 GRB
-
-#define COLOR(r, g, b) ( ((uint32_t)(r) << 16) | ((uint32_t)(g) << 8) | (uint32_t)(b) )
-
-ws2811_t ledstring = {
-    .freq = WS2811_TARGET_FREQ,
-    .dmanum = DMA,
-    .channel = {
-        [0] = {
-            .gpionum = LED_PIN,
-            .count = LED_COUNT,
-            .invert = 0,
-            .brightness = BRIGHTNESS,
-            .strip_type = STRIP_TYPE
-        },
-        [1] = {0}
-    }
-};
-
-void led_set(uint32_t color)
-{
-    for (int i = 0; i < LED_COUNT; i++)
-    {
-        ledstring.channel[0].leds[i] = color;
-    }
-    ws2811_render(&ledstring);
-}
 
 
 int hw_INIT(int *spi_handle, int *uart_fd)
@@ -75,12 +37,14 @@ int hw_INIT(int *spi_handle, int *uart_fd)
     }
 
     // LED 초기화
-    if (ws2811_init(&ledstring) != WS2811_SUCCESS)
+    if (led_INIT() != 0)
     {
-        fprintf(stderr, "ws2811 초기화 실패!\n");
+        fprintf(stderr, "LED 초기화 실패!\n");
+        spiClose(*spi_handle);
+        gpioTerminate();
+        close(*uart_fd);
         return -4;
     }
-    led_set(COLOR(0, 0, 0)); // LED OFF
 
     return 0; // 성공
 }
@@ -202,8 +166,7 @@ int main()
         gpioDelay(10000); // 10ms
     }
 
-    led_set(COLOR(0,0,0));
-    ws2811_fini(&ledstring);
+    led_finish();
     spiClose(spi_handle);
     gpioTerminate();
     close(uart_fd);

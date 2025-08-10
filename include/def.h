@@ -4,3 +4,6 @@
 #include <termios.h>
 #include <unistd.h>
 #include <string.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include "ws2811.h"
