@@ -89,7 +89,7 @@ int main()
                 float rx_MotorSpeed;
                 if (sscanf(line, "MotorSpeed: %f", &rx_MotorSpeed) == 1)
                 {
-                    MotorSpeed = rx_MotorSpeed * 150; // 수신은 cm/s인데 실제를 가장해서 170을 곱함
+                    MotorSpeed = rx_MotorSpeed * 150; // 수신은 cm/s인데 실제를 가장해서 150을 곱함
                 }
                 idx = 0;
                 break;
@@ -130,7 +130,7 @@ int main()
                 continue;
 
             // 감속도가 작으면 LED OFF
-            if (acceleration > -10.0f)
+            if (acceleration > -7.0f)
             {
                 led_flag = -1;
                 led_set(COLOR(0, 0, 0)); // LED OFF
